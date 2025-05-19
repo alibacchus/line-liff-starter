@@ -1,0 +1,46 @@
+{
+  "type": "flex",
+  "altText": "診断の同意",
+  "contents": {
+    "type": "bubble",
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        {
+          "type": "text",
+          "text": "これから15問の質問をします。よろしいですか？",
+          "wrap": true,
+          "weight": "bold",
+          "size": "md",
+          "margin": "md"
+        },
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "margin": "lg",
+          "contents": [
+            {
+              "type": "button",
+              "style": "primary",
+              "action": {
+                "type": "postback",
+                "label": "はい",
+                "data": "consent=yes"
+              }
+            },
+            {
+              "type": "button",
+              "style": "secondary",
+              "action": {
+                "type": "postback",
+                "label": "いいえ",
+                "data": "consent=no"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

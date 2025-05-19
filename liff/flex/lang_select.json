@@ -1,0 +1,63 @@
+{
+  "type": "bubble",
+  "header": {
+    "type": "box",
+    "layout": "vertical",
+    "contents": [
+      {
+        "type": "text",
+        "text": "言語を選択してください／Please select your language",
+        "wrap": true,
+        "weight": "bold",
+        "size": "md"
+      }
+    ]
+  },
+  "body": {
+    "type": "box",
+    "layout": "vertical",
+    "spacing": "sm",
+    "contents": [
+      {
+        "type": "button",
+        "action": {
+          "type": "postback",
+          "label": "日本語",
+          "data": "lang=ja"
+        }
+      },
+      {
+        "type": "button",
+        "action": {
+          "type": "postback",
+          "label": "English",
+          "data": "lang=en"
+        }
+      },
+      {
+        "type": "button",
+        "action": {
+          "type": "postback",
+          "label": "中文",
+          "data": "lang=zh"
+        }
+      },
+      {
+        "type": "button",
+        "action": {
+          "type": "postback",
+          "label": "Français",
+          "data": "lang=fr"
+        }
+      },
+      {
+        "type": "button",
+        "action": {
+          "type": "postback",
+          "label": "Español",
+          "data": "lang=es"
+        }
+      }
+    ]
+  }
+}
