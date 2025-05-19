@@ -1,0 +1,16 @@
+# 1) 本番ビルド／プレビュー設定
+[build]
+  publish   = "liff"
+  functions = "functions"
+
+# 2) ローカル開発 (netlify dev) 設定
+[dev]
+  publish   = "liff"
+  functions = "functions"
+
+# 3) Functions ビルド設定
+[functions]
+  external_node_modules = [
+    "@supabase/supabase-js",
+    "@line/bot-sdk",
+  ]

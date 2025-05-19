@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+  <title>EmTrip ミニアプリを起動中…</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>EmTrip ミニアプリを起動中…</h1>
+
+  <!-- LIFF SDK v1（互換用、実質は v2 を使います） -->
+  <script src="https://d.line-scdn.net/liff/1.0/sdk.js"></script>
+  <!-- LIFF SDK v2（最新、こちらを使用） -->
+  <script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
+
+  <script>
+    (async () => {
+      // ← 必ず「開発用 LIFF ID」をここに貼り付け！
+      const liffId = "2007367707-gbRXQdAr";
+
+      try {
+        await liff.init({ liffId });
+      } catch (err) {
+        document.body.innerHTML +=
+          "<p>LIFF の初期化に失敗しました。<br>LINE アプリ内で開いているか確認してください。</p>";
+        return;
+      }
+
+      if (!liff.isInClient()) {
+        document.body.innerHTML +=
+          "<p>このページは LINE アプリ内で開いてください。</p>";
+        return;
+      }
+
+      // 起動直後に言語選択をチャットに送信
+      await liff.sendMessages([
+        {
+          type: "template",
+          altText: "言語を選択してください",
+          template: {
+            type: "buttons",
+            text: "言語を選択してください／Please select your language",
+            actions: [
+              { type: "postback", label: "日本語", data: "lang=ja" },
+              { type: "postback", label: "English", data: "lang=en" },
+              { type: "postback", label: "中文", data: "lang=zh" },
+            ],
+          },
+        },
+      ]);
+
+      // メッセージ送信後はウィンドウを閉じる
+      liff.closeWindow();
+    })();
+  </script>
+</body>
+</html>

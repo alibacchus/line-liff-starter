@@ -1,0 +1,18 @@
+{
+  "name": "line-liff-starter",
+  "version": "1.0.0",
+  "scripts": {
+    "dev:fn": "netlify dev --functions=functions",
+    "dev:web": "serve -s liff -l 19006",
+    "dev": "echo \"▶︎ run 'npm run dev:fn' と (任意で) 'npm run dev:web' を別タブで実行してください\"",
+    "build": "netlify build"
+  },
+  "dependencies": {
+    "@line/bot-sdk": "^9.9.0",
+    "@supabase/supabase-js": "^2.49.4",
+    "@netlify/functions": "^3.1.8"
+  },
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}
