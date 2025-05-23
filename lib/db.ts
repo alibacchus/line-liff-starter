@@ -22,10 +22,10 @@ export async function saveAnswer(
   const { error } = await supabase
     .from('responses')
     .insert({
-      user_id:    userId,
-      item_id:    data.question,
-      score:      data.answer,
-      created_at: new Date().toISOString(),
+      user_id: userId,
+      item_id: data.question,
+      score:   data.answer,
+      // created_at: new Date().toISOString(),  ← テーブルに無いため削除
     })
   if (error) {
     console.error('🚨 Supabase insert error:', error)
@@ -49,21 +49,17 @@ export async function getAnswerCount(userId: string): Promise<number> {
 
 // アンケート完了後にメッセージを送信
 export async function finishSurveyAndReply(userId: string) {
-  // 完了メッセージ
   const messages = [
     {
       type: 'text',
-      text: '🎉 すべての回答を受け付けました！ありがとうございました！'
-    }
+      text: '🎉 すべての回答を受け付けました！ありがとうございました！',
+    },
   ]
 
   try {
-    // LINE にプッシュ
     await client.pushMessage(userId, messages)
   } catch (err: any) {
-    // ← ここを追加
     console.error('🚨 LINE push error data:', err.response?.data || err.toString())
     throw err
   }
 }
-
