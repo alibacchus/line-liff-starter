@@ -1,76 +1,64 @@
 // functions/postback.ts
+
 import { HandlerEvent, HandlerResponse } from '@netlify/functions'
 import { saveAnswer, getAnswerCount, finishSurveyAndReply } from '../lib/db'
 
 export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   try {
-    // ── 1. ボディをパース ─────────────────────────────
-    const contentType =
-      event.headers['content-type'] ||
-      event.headers['Content-Type'] ||
-      ''
+    // 1️⃣ リクエストボディをパース
+    const body = JSON.parse(event.body || '{}')
 
-    // パース結果を格納するオブジェクト
-    let payload: Record<string, string> = {}
+    let userId: string
+    let data: { question: string; answer: number }
 
-    if (contentType.includes('application/json')) {
-      // JSON の場合
-      payload = JSON.parse(event.body || '{}')
-    } else {
-      // URL エンコード・フォームの場合
-      const params = new URLSearchParams(event.body || '')
-      for (const [key, value] of params.entries()) {
-        payload[key] = value
+    // 2️⃣ LINE Webhook イベントの場合
+    if (Array.isArray(body.events) && body.events.length > 0) {
+      const ev = body.events[0]
+      if (ev.type !== 'postback' || !ev.source?.userId || !ev.postback?.data) {
+        return { statusCode: 400, body: 'Invalid event' }
       }
-    }
-
-    // ── 2. userId / question / answer を取り出し ────────────
-    const userId = payload.userId
-    if (!userId) {
-      throw new Error('userId が見つかりません')
-    }
-
-    // 質問キーを探す（"question" があればそちらを優先。なければ q1～q15 などを探す）
-    let questionKey: string
-    let answerValue: string
-
-    if ('question' in payload && 'answer' in payload) {
-      questionKey = payload.question
-      answerValue = payload.answer
-    } else {
-      const qKey = Object.keys(payload).find(k => /^q\d+$/.test(k))
-      if (!qKey) {
-        throw new Error('question キー(q1～q15 など)が見つかりません')
+      userId = ev.source.userId
+      // postback.data は "q1=3" のような文字列
+      const [question, answerStr] = ev.postback.data.split('=')
+      const answer = parseInt(answerStr, 10)
+      if (isNaN(answer)) {
+        return { statusCode: 400, body: 'Invalid answer value' }
       }
-      questionKey = qKey
-      answerValue = payload[qKey]
+      data = { question, answer }
+
+    // 3️⃣ 直接 JSON で { userId, question, answer } が来る場合のフォールバック
+    } else if (
+      typeof body.userId === 'string' &&
+      typeof body.question === 'string' &&
+      typeof body.answer === 'number'
+    ) {
+      userId = body.userId
+      data = { question: body.question, answer: body.answer }
+
+    } else {
+      return { statusCode: 400, body: 'Bad Request' }
     }
 
-    // 数字に変換しておく
-    const answerNum = Number(answerValue)
-    if (isNaN(answerNum)) {
-      throw new Error(`answer が数値ではありません: ${answerValue}`)
-    }
-
-    const data = { question: questionKey, answer: answerNum }
-
-    // ── 3. 保存→件数取得→完了判定 ─────────────────────────
+    // 4️⃣ 回答を保存
     await saveAnswer(userId, data)
     console.log(`📝 Saved answer for ${userId}:`, data)
 
+    // 5️⃣ 現在の回答件数を取得してログ出力
     const count = await getAnswerCount(userId)
     console.log(`📝 Current answerCount for ${userId}:`, count)
 
+    // 6️⃣ 15件到達で完了処理
     if (count === 15) {
       console.log('✅ All 15 answers received. Calling finishSurveyAndReply…')
       await finishSurveyAndReply(userId)
     }
 
-    // ── 4. 正常レスポンス ─────────────────────────────────
+    // 7️⃣ 正常レスポンス
     return {
       statusCode: 200,
       body: JSON.stringify({ status: 'ok' }),
     }
+
   } catch (e: any) {
     console.error('🚨 Handler error:', e)
     return {
