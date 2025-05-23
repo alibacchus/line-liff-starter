@@ -1,64 +1,71 @@
 // functions/postback.ts
-
 import { HandlerEvent, HandlerResponse } from '@netlify/functions'
 import { saveAnswer, getAnswerCount, finishSurveyAndReply } from '../lib/db'
 
 export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   try {
-    // 1️⃣ リクエストボディをパース
-    const body = JSON.parse(event.body || '{}')
-
+    // ──────────────────────────────
+    // 1. body のパース
+    // ──────────────────────────────
+    const contentType =
+      event.headers['content-type'] ||
+      event.headers['Content-Type'] ||
+      ''
     let userId: string
-    let data: { question: string; answer: number }
+    let question: number
+    let answer: number
 
-    // 2️⃣ LINE Webhook イベントの場合
-    if (Array.isArray(body.events) && body.events.length > 0) {
-      const ev = body.events[0]
-      if (ev.type !== 'postback' || !ev.source?.userId || !ev.postback?.data) {
-        return { statusCode: 400, body: 'Invalid event' }
-      }
-      userId = ev.source.userId
-      // postback.data は "q1=3" のような文字列
-      const [question, answerStr] = ev.postback.data.split('=')
-      const answer = parseInt(answerStr, 10)
-      if (isNaN(answer)) {
-        return { statusCode: 400, body: 'Invalid answer value' }
-      }
-      data = { question, answer }
-
-    // 3️⃣ 直接 JSON で { userId, question, answer } が来る場合のフォールバック
-    } else if (
-      typeof body.userId === 'string' &&
-      typeof body.question === 'string' &&
-      typeof body.answer === 'number'
-    ) {
-      userId = body.userId
-      data = { question: body.question, answer: body.answer }
-
+    if (contentType.includes('application/json')) {
+      // JSON の場合
+      const parsed = JSON.parse(event.body || '{}')
+      userId = parsed.userId
+      question = parsed.data?.question
+      answer = parsed.data?.answer
     } else {
-      return { statusCode: 400, body: 'Bad Request' }
+      // x-www-form-urlencoded の場合 (test_loop_verbose.sh や LINE postback でこちらになる)
+      const params = new URLSearchParams(event.body || '')
+      userId = params.get('userId') || ''
+      question = Number(params.get('question'))
+      answer = Number(params.get('answer'))
     }
 
-    // 4️⃣ 回答を保存
-    await saveAnswer(userId, data)
-    console.log(`📝 Saved answer for ${userId}:`, data)
+    if (!userId) {
+      throw new Error('userId が見つかりません')
+    }
+    if (typeof question !== 'number' || isNaN(question)) {
+      throw new Error('question が不正です')
+    }
+    if (typeof answer !== 'number' || isNaN(answer)) {
+      throw new Error('answer が不正です')
+    }
 
-    // 5️⃣ 現在の回答件数を取得してログ出力
-    const count = await getAnswerCount(userId)
-    console.log(`📝 Current answerCount for ${userId}:`, count)
+    // ──────────────────────────────
+    // 2. responses テーブルに書き込む
+    //    （lib/db.ts で item_id←question, score←answer にマッピング済み）
+    // ──────────────────────────────
+    await saveAnswer(userId, { question, answer })
+    console.log(`📝 Saved answer for ${userId}:`, { question, answer })
 
-    // 6️⃣ 15件到達で完了処理
-    if (count === 15) {
-      console.log('✅ All 15 answers received. Calling finishSurveyAndReply…')
+    // ──────────────────────────────
+    // 3. 件数を取得して完了判定
+    // ──────────────────────────────
+    const answerCount = await getAnswerCount(userId)
+    console.log(`📝 Current answerCount for ${userId}:`, answerCount)
+
+    if (answerCount === 15) {
+      console.log(
+        '✅ All 15 answers received. Calling finishSurveyAndReply…'
+      )
       await finishSurveyAndReply(userId)
     }
 
-    // 7️⃣ 正常レスポンス
+    // ──────────────────────────────
+    // 4. 正常レスポンス
+    // ──────────────────────────────
     return {
       statusCode: 200,
       body: JSON.stringify({ status: 'ok' }),
     }
-
   } catch (e: any) {
     console.error('🚨 Handler error:', e)
     return {
