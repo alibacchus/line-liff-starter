@@ -1,50 +1,69 @@
-import { createClient } from '@supabase/supabase-js'
-import { Client as LineClient } from '@line/bot-sdk'
+// lib/db.ts
 
-const supabase = createClient(
+import { createClient } from '@supabase/supabase-js'
+import { Client } from '@line/bot-sdk'
+
+// Supabase クライアントの初期化
+export const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const lineClient = new LineClient({
-  channelSecret: process.env.LINE_CHANNEL_SECRET!,
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
+// LINE SDK クライアントの初期化
+const client = new Client({
+  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!
 })
 
-/**
- * 回答を保存する
- */
-export async function saveAnswer(userId: string, data: any): Promise<void> {
-  // data.question → item_id, data.answer → score にマッピング
+// 回答を保存
+export async function saveAnswer(
+  userId: string,
+  data: { question: number; answer: number }
+) {
   const { error } = await supabase
     .from('responses')
     .insert({
       user_id:    userId,
-      item_id:    Number(data.question),  // 質問番号
-      score:      Number(data.answer),    // 回答のスコア
-      answered_at: new Date(),
+      item_id:    data.question,
+      score:      data.answer,
+      created_at: new Date().toISOString(),
     })
-  if (error) throw error
+  if (error) {
+    console.error('🚨 Supabase insert error:', error)
+    throw error
+  }
 }
 
-/**
- * 指定ユーザーの回答件数を取得する
- */
+// 回答件数を取得
 export async function getAnswerCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from('responses')
-    .select('*', { count: 'exact', head: true })
+    .select('id', { count: 'exact' })
     .eq('user_id', userId)
-  if (error) throw error
-  return count || 0
+
+  if (error) {
+    console.error('🚨 Supabase count error:', error)
+    throw error
+  }
+  return data!.length
 }
 
-/**
- * アンケート完了時に LINE へメッセージを送信する
- */
-export async function finishSurveyAndReply(userId: string): Promise<void> {
-  await lineClient.pushMessage(userId, {
-    type: 'text',
-    text: '🎉 すべての回答を受け付けました！ありがとうございました！',
-  })
+// アンケート完了後にメッセージを送信
+export async function finishSurveyAndReply(userId: string) {
+  // 完了メッセージ
+  const messages = [
+    {
+      type: 'text',
+      text: '🎉 すべての回答を受け付けました！ありがとうございました！'
+    }
+  ]
+
+  try {
+    // LINE にプッシュ
+    await client.pushMessage(userId, messages)
+  } catch (err: any) {
+    // ← ここを追加
+    console.error('🚨 LINE push error data:', err.response?.data || err.toString())
+    throw err
+  }
 }
+
