@@ -1,4 +1,3 @@
-// lib/db.ts
 import { createClient } from '@supabase/supabase-js'
 import { Client as LineClient } from '@line/bot-sdk'
 
@@ -13,19 +12,16 @@ const lineClient = new LineClient({
 })
 
 /**
- * 回答を保存する（responses テーブルを使います）
- * item_id に question、score に answer をマッピング
+ * 回答を保存する
  */
-export async function saveAnswer(
-  userId: string,
-  data: { question: number; answer: number }
-): Promise<void> {
+export async function saveAnswer(userId: string, data: any): Promise<void> {
+  // data.question → item_id, data.answer → score にマッピング
   const { error } = await supabase
     .from('responses')
     .insert({
-      user_id: userId,
-      item_id: data.question,
-      score: data.answer,
+      user_id:    userId,
+      item_id:    Number(data.question),  // 質問番号
+      score:      Number(data.answer),    // 回答のスコア
       answered_at: new Date(),
     })
   if (error) throw error
