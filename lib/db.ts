@@ -6,8 +6,7 @@ const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-const lineClient = new LineClient({
+const client = new LineClient({
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
 })
 
@@ -20,7 +19,7 @@ export async function saveAnswer(
     .insert({
       user_id: userId,
       item_id: data.question,
-      answer: data.answer,       // ← 修正済み
+      score: data.answer,         // ← ここを “score” に
     })
   if (error) {
     console.error('🚨 Supabase insert error:', error)
@@ -28,30 +27,27 @@ export async function saveAnswer(
   }
 }
 
-export async function getAnswerCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
+export async function getAnswerCount(userId: string) {
+  const { data, error } = await supabase
     .from('responses')
-    .select('*', { count: 'exact', head: true })
+    .select('item_id', { count: 'exact' })
     .eq('user_id', userId)
   if (error) {
     console.error('🚨 Supabase count error:', error)
     throw error
   }
-  return count || 0
+  return data!.length
 }
 
 export async function finishSurveyAndReply(userId: string) {
   const messages: Message[] = [
-    { type: 'text', text: '🎉 すべての回答を受け付けました！ありがとうございました！' },
+    { type: 'text', text: '🎉 すべての回答を受け付けました！ありがとうございました！' }
   ]
   try {
-    await lineClient.pushMessage(userId, messages)
+    await client.pushMessage(userId, messages)
   } catch (err: any) {
     console.error('🚨 LINE push error status:', err.statusCode, err.statusMessage)
-    console.error(
-      '🚨 LINE push error response.data:',
-      JSON.stringify(err.response?.data, null, 2)
-    )
+    console.error('🚨 LINE push error response.data:', JSON.stringify(err.response?.data, null, 2))
     throw err
   }
 }
