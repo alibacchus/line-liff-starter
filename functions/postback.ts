@@ -1,11 +1,21 @@
 // functions/postback.ts
+
 import { HandlerEvent, HandlerResponse } from '@netlify/functions'
 import { saveAnswer, getAnswerCount, finishSurveyAndReply } from '../lib/db'
 
 export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   try {
-    // リクエストボディから userId と data を取得
-    const { userId, data } = JSON.parse(event.body || '{}')
+    // —① リクエストボディをパースして最初のイベントを取得
+    const body = JSON.parse(event.body || '{}')
+    const ev = (body.events as any[])[0]
+
+    // —② userId と postback の data ("q1=3" など) を取得
+    const userId = ev.source.userId as string
+    const [question, answerStr] = (ev.postback?.data as string).split('=')
+    const answer = parseInt(answerStr, 10)
+
+    // —③ saveAnswer に渡すオブジェクトを整形
+    const data = { question, answer }
 
     // ① 回答を保存
     await saveAnswer(userId, data)
