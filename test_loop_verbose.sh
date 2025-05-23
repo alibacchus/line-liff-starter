@@ -1,31 +1,30 @@
 #!/usr/bin/env bash
-HOST_URL=${NGROK_URL:-"http://localhost:8888"}
+# --- config ---
+ENDPOINT="http://localhost:8888/.netlify/functions/postback"
+USER_ID="Uc1234567890abcdefgh"   # ★固定でOK
+SIGN_SECRET="$LINE_CHANNEL_SECRET"  # ローカル .env から export 済み前提
+QUESTIONS=(Q1 Q2 Q3 Q4 Q5 Q6 Q7 Q8 Q9 Q10 Q11 Q12 Q13 Q14 Q15)
 
-#
-# test_loop_verbose.sh — Q1〜Q15 の postback 送信＆レスポンス確認スクリプト
-
-# 事前に読み込んでおくこと
-#   export $(grep -v '^#' .env | xargs)
-#   export NGROK_URL='https://5aa2-202-171-224-108.ngrok-free.app'
-#   export LINE_CHANNEL_SECRET=（.env から読み込んでください）
-
-for i in $(seq 1 15); do
-  BODY="{\"events\":[{\"type\":\"postback\",\"replyToken\":\"TEST\",\"source\":{\"userId\":\"TEST_USER\"},\"postback\":{\"data\":\"q${i}=3\"}}]}"
-
-  # HMAC-SHA256 → Base64 署名
-  SIGNATURE=$(printf '%s' "$BODY" \
-    | openssl dgst -binary -sha256 -hmac "$LINE_CHANNEL_SECRET" \
-    | base64)
-
-  # ここで必ず署名を出力！
-  echo "🔑 Q${i} signature: $SIGNATURE"
-
-  echo "---- Q${i} ----"
-  curl -i -X POST "${HOST_URL}/.netlify/functions/postback" \
-    -H "Content-Type: application/json" \
-    -H "X-Line-Signature: ${SIGNATURE}" \
-    -d "$BODY"
-
-  echo; echo
+# --- loop ---
+for Q in "${QUESTIONS[@]}"; do
+  PAYLOAD=$(cat <<EOF
+{
+  "events":[
+    {
+      "type":"postback",
+      "postback":{
+        "data":"answer=${Q}:3"
+      },
+      "source":{
+        "userId":"${USER_ID}",
+        "type":"user"
+      }
+    }
+  ]
+}
+EOF
+)
+  SIG=$(echo -n "${PAYLOAD}" | openssl dgst -sha256 -hmac "${SIGN_SECRET}" -binary | base64)
+  echo "🔑 ${Q} signature: ${SIG}"
+  curl -s -X POST -H "Content-Type: application/json" -H "X-Line-Signature: ${SIG}" -d "${PAYLOAD}" "${ENDPOINT}" | jq .
 done
-
