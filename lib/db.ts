@@ -24,8 +24,7 @@ export async function saveAnswer(
     .insert({
       user_id: userId,
       item_id: data.question,
-      score:   data.answer,
-      // created_at: new Date().toISOString(),  ← テーブルに無いため削除
+      score:   data.answer
     })
   if (error) {
     console.error('🚨 Supabase insert error:', error)
@@ -52,14 +51,20 @@ export async function finishSurveyAndReply(userId: string) {
   const messages = [
     {
       type: 'text',
-      text: '🎉 すべての回答を受け付けました！ありがとうございました！',
-    },
+      text: '🎉 すべての回答を受け付けました！ありがとうございました！'
+    }
   ]
 
   try {
     await client.pushMessage(userId, messages)
   } catch (err: any) {
-    console.error('🚨 LINE push error data:', err.response?.data || err.toString())
+    // エラー詳細を整形して出力
+    console.error(
+      '🚨 LINE push error data:',
+      err.response?.data
+        ? JSON.stringify(err.response.data, null, 2)
+        : err.toString()
+    )
     throw err
   }
 }
