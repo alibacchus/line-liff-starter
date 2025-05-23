@@ -1,50 +1,37 @@
 // functions/postback.ts
-import { HandlerEvent, HandlerContext } from '@netlify/functions';
-import { Client, validateSignature, WebhookEvent } from '@line/bot-sdk';
-import { getUserLanguage, updateLanguage, saveAnswer } from '../lib/db';
+import { HandlerEvent, HandlerResponse } from '@netlify/functions'
+import { saveAnswer, getAnswerCount, finishSurveyAndReply } from '../lib/db'
 
-const client = new Client({
-  channelSecret: process.env.LINE_CHANNEL_SECRET!,
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
-});
+export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
+  try {
+    // リクエストボディから userId と data を取得
+    const { userId, data } = JSON.parse(event.body || '{}')
 
-export async function handler(
-  event: HandlerEvent,
-  context: HandlerContext
-) {
-  // ————————————
-  // ① 署名検証
-  //  LINEプラットフォームが送ってくる署名をヘッダーから取得
-  const signature =
-    (event.headers['x-line-signature'] as string) ||
-    (event.headers['X-Line-Signature'] as string);
-  if (!signature) {
-    console.error('Missing X-Line-Signature header');
-    return { statusCode: 401, body: 'Invalid signature' };
-  }
-  //  本文（raw body）＋チャンネルシークレット＋取得した署名 で検証
-  if (
-    !validateSignature(
-      event.body!,                           // リクエストボディの生文字列
-      process.env.LINE_CHANNEL_SECRET!,      // チャンネルシークレット
-      signature                               // ヘッダーの署名
-    )
-  ) {
-    return { statusCode: 401, body: 'Invalid signature' };
-  }
+    // ① 回答を保存
+    await saveAnswer(userId, data)
+    console.log(`📝 Saved answer for ${userId}:`, data)
 
-  // ————————————
-  // ② イベントループ
-  const body = JSON.parse(event.body!);
-  for (const ev of body.events as WebhookEvent[]) {
-    try {
-      const userId = ev.source.userId!;
-      // ここに postback / message ハンドリングの既存ロジックを続けてください…
-      // 例: if(ev.type==='postback' && ev.postback.data==='lang=ja'){…}
-    } catch (err) {
-      console.error(err);
+    // ② 現在の保存件数を取得してログ出力
+    const answerCount = await getAnswerCount(userId)
+    console.log(`📝 Current answerCount for ${userId}:`, answerCount)
+
+    // ③ 件数が 15 のときだけ完了処理を実行
+    if (answerCount === 15) {
+      console.log('✅ All 15 answers received. Calling finishSurveyAndReply…')
+      await finishSurveyAndReply(userId)
+    }
+
+    // 正常レスポンスを返す
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ status: 'ok' }),
+    }
+  } catch (e: any) {
+    // 例外時も必ずレスポンスを返して CLI のクラッシュを防ぐ
+    console.error('🚨 Handler error:', e)
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: e.message }),
     }
   }
-
-  return { statusCode: 200, body: 'OK' };
 }
