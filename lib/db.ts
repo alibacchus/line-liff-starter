@@ -1,5 +1,3 @@
-// lib/db.ts
-
 import { createClient } from '@supabase/supabase-js'
 import { Client as LineClient } from '@line/bot-sdk'
 
@@ -20,11 +18,11 @@ const lineClient = new LineClient({
  */
 export async function saveAnswer(userId: string, data: any): Promise<void> {
   const { error } = await supabase
-    .from('responses')            // ← ここを 'answers' から 'responses' に変更
+    .from('responses')
     .insert({
-      user_id:    userId,
-      question:   data.question,  // data.question と data.answer の構造であることを確認
-      answer:     data.answer,
+      user_id:     userId,
+      question:    data.question,    // postback.data.question
+      score:       data.answer,      // ← ここを 'score' に合わせる
       answered_at: new Date(),
     })
   if (error) throw error
@@ -35,7 +33,7 @@ export async function saveAnswer(userId: string, data: any): Promise<void> {
  */
 export async function getAnswerCount(userId: string): Promise<number> {
   const { count, error } = await supabase
-    .from('responses')            // ← 同じく 'responses' テーブルを参照
+    .from('responses')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
   if (error) throw error

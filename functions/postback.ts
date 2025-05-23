@@ -5,39 +5,32 @@ import { saveAnswer, getAnswerCount, finishSurveyAndReply } from '../lib/db'
 
 export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   try {
-    // —① リクエストボディをパースして最初のイベントを取得
-    const body = JSON.parse(event.body || '{}')
-    const ev = (body.events as any[])[0]
+    // ① リクエストボディから userId と postback.data（{ question, answer }）を取得
+    const { userId, data } = JSON.parse(event.body || '{}')
+    //    └ data.question に質問キー (e.g. "q1")
+    //    └ data.answer   に回答スコア (e.g. 3)
 
-    // —② userId と postback の data ("q1=3" など) を取得
-    const userId = ev.source.userId as string
-    const [question, answerStr] = (ev.postback?.data as string).split('=')
-    const answer = parseInt(answerStr, 10)
-
-    // —③ saveAnswer に渡すオブジェクトを整形
-    const data = { question, answer }
-
-    // ① 回答を保存
+    // ② responses テーブルへ INSERT
     await saveAnswer(userId, data)
     console.log(`📝 Saved answer for ${userId}:`, data)
 
-    // ② 現在の保存件数を取得してログ出力
+    // ③ 現在の回答件数を取得
     const answerCount = await getAnswerCount(userId)
     console.log(`📝 Current answerCount for ${userId}:`, answerCount)
 
-    // ③ 件数が 15 のときだけ完了処理を実行
+    // ④ 15件目で完了メッセージを送る
     if (answerCount === 15) {
       console.log('✅ All 15 answers received. Calling finishSurveyAndReply…')
       await finishSurveyAndReply(userId)
     }
 
-    // 正常レスポンスを返す
+    // ⑤ 正常レスポンス
     return {
       statusCode: 200,
       body: JSON.stringify({ status: 'ok' }),
     }
   } catch (e: any) {
-    // 例外時も必ずレスポンスを返して CLI のクラッシュを防ぐ
+    // エラー時にも必ずレスポンスを返すことで CLI のクラッシュを防止
     console.error('🚨 Handler error:', e)
     return {
       statusCode: 500,
