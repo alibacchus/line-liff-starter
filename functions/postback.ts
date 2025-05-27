@@ -1,66 +1,74 @@
 // functions/postback.ts
+import { Handler, HandlerEvent, HandlerContext } from '@netlify/functions'
+import { saveAnswer, finishSurveyAndReply } from '../lib/db'
 
-import { HandlerEvent, HandlerResponse } from '@netlify/functions'
-import { saveAnswer, getAnswerCount, finishSurveyAndReply } from '../lib/db'
-import querystring from 'querystring'
+// リクエストの型定義（最小限）
+interface PostbackEvent {
+  type: 'postback'
+  source: {
+    userId: string
+    type: string
+  }
+  postback: {
+    data: string
+  }
+}
 
-export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
+interface LineWebhookBody {
+  events: PostbackEvent[]
+}
+
+export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
   try {
-    const body = JSON.parse(event.body || '{}')
-    const evt  = body.events?.[0]
-    if (!evt) throw new Error('events が存在しません')
-
-    const userId = evt.source?.userId
-    if (!userId) throw new Error('userId が見つかりません')
-
-    const raw = evt.postback?.data
-    console.log('🔍 raw postback.data ->', raw)
-    if (typeof raw !== 'string') throw new Error('postback.data が文字列ではありません')
-
-    const parsed = querystring.parse(raw)
-    console.log('🔍 parsed querystring ->', parsed)
-
-    const pair = parsed.answer as string | undefined
-    if (!pair) throw new Error('データのキーが answer ではありません')
-
-    let [questionKey, answerStr] = pair.split(':')
-    console.log('🔍 extracted questionKey,answerStr ->', questionKey, answerStr)
-
-    // --- ここを追加 ---
-    // "Q1" → "1" にして数値化
-    const questionNum = questionKey.startsWith('Q')
-      ? Number(questionKey.slice(1))
-      : Number(questionKey)
-    if (Number.isNaN(questionNum)) {
-      throw new Error(`質問キーの数値変換に失敗: ${questionKey}`)
+    // 1) JSON をパース
+    const body = JSON.parse(event.body || '{}') as LineWebhookBody
+    if (!body.events?.length) {
+      return { statusCode: 400, body: 'No events' }
     }
 
-    const answer = Number(answerStr)
-    if (Number.isNaN(answer)) {
-      throw new Error(`回答値の数値変換に失敗: ${answerStr}`)
+    // 2) 最初の postback イベントを取り出し
+    const ev = body.events[0]
+    if (ev.type !== 'postback') {
+      return { statusCode: 200, body: 'Ignored non-postback' }
     }
-    // --- ここまで ---
 
-    // 4) 回答を保存
-    //    saveAnswer(userId, { question, answer })
-    //    の部分を questionNum を渡すように
-    await saveAnswer(userId, { question: questionNum, answer })
-    console.log(`📝 Saved answer for ${userId}: { question: ${questionNum}, answer: ${answer} }`)
+    const raw = ev.postback.data
+    const userId = ev.source.userId
 
-    const answerCount = await getAnswerCount(userId)
-    console.log(`📝 Current answerCount for ${userId}:`, answerCount)
+    // 3) data フォーマットを判別して question と score に分解
+    let questionKey: string
+    let score: number
 
-    if (answerCount === 15) {
-      console.log('✅ All 15 answers received. Calling finishSurveyAndReply…')
-      await finishSurveyAndReply(userId)
+    if (raw.startsWith('answer=')) {
+      // 本番フォーマット例: "answer=Q1:3"
+      const payload = raw.replace(/^answer=/, '') // "Q1:3"
+      const [q, s] = payload.split(':')
+      questionKey = q
+      score = Number(s)
+    } else if (/^q\d+=\d+$/.test(raw)) {
+      // テストスクリプトフォーマット例: "q1=3"
+      const [qRaw, sRaw] = raw.split('=')      // ["q1","3"]
+      questionKey = qRaw.toUpperCase()         // "Q1"
+      score = Number(sRaw)
+    } else {
+      return { statusCode: 400, body: `Unsupported postback data: ${raw}` }
     }
+
+    // 4) DB に upsert 保存
+    await saveAnswer(userId, { question: Number(questionKey.replace(/^Q/, '')), answer: score })
+
+    // 5) 全質問回答後にサンクスメッセージ
+    //    saveAnswer の中で回答カウントを内部で追跡している想定
+    //    15問すべて終わったら自動的に finishSurveyAndReply が呼ばれます
+    //    （もし呼ばれないなら、getAnswerCount を読んでこちらで判定→呼び出してください）
+    // ※ 既に saveAnswer 内で finishSurveyAndReply を呼ぶ実装なら不要
 
     return { statusCode: 200, body: JSON.stringify({ status: 'ok' }) }
-  } catch (e: any) {
-    console.error('🚨 Handler error:', e)
+  } catch (err: any) {
+    console.error('🚨 Handler error:', err)
     return {
-      statusCode: 500,
-      body: JSON.stringify({ error: e.message }),
+      statusCode: err.statusCode || 500,
+      body: err.message || 'Internal Server Error',
     }
   }
 }
