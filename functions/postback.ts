@@ -1,6 +1,6 @@
 // functions/postback.ts
 import { Handler, HandlerEvent, HandlerContext } from '@netlify/functions'
-import { saveAnswer, finishSurveyAndReply } from '../lib/db'
+import { saveAnswer, getAnswerCount, notifySurveyCompleted } from '../lib/db'
 
 // リクエストの型定義（最小限）
 interface PostbackEvent {
@@ -17,6 +17,9 @@ interface PostbackEvent {
 interface LineWebhookBody {
   events: PostbackEvent[]
 }
+
+// アンケートの総質問数
+const TOTAL_QUESTIONS = 15
 
 export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
   try {
@@ -55,13 +58,16 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     }
 
     // 4) DB に upsert 保存
-    await saveAnswer(userId, { question: Number(questionKey.replace(/^Q/, '')), answer: score })
+    await saveAnswer(
+      userId,
+      { question: Number(questionKey.replace(/^Q/, '')), answer: score }
+    )
 
-    // 5) 全質問回答後にサンクスメッセージ
-    //    saveAnswer の中で回答カウントを内部で追跡している想定
-    //    15問すべて終わったら自動的に finishSurveyAndReply が呼ばれます
-    //    （もし呼ばれないなら、getAnswerCount を読んでこちらで判定→呼び出してください）
-    // ※ 既に saveAnswer 内で finishSurveyAndReply を呼ぶ実装なら不要
+    // 5) 全質問回答数を取得し、15問回答済みであればサンクス通知を送信
+    const count = await getAnswerCount(userId)
+    if (count === TOTAL_QUESTIONS) {
+      await notifySurveyCompleted(userId)
+    }
 
     return { statusCode: 200, body: JSON.stringify({ status: 'ok' }) }
   } catch (err: any) {

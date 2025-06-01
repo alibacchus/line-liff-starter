@@ -1,2 +1,23 @@
+# netlify.toml
+
+[build]
+  publish   = "liff"
+  functions = "functions"
+
 [dev]
-  framework = "none"
+  publish   = "liff"
+  functions = "functions"
+
+# 1) Functions エンドポイントはそのまま Functions ディレクトリへ
+[[redirects]]
+  from   = "/.netlify/functions/*"
+  to     = "/.netlify/functions/:splat"
+  status = 200
+  force  = true
+
+# 2) その他のすべて（/, /chat.html, /foo/bar など）は liff/index.html へフォールバック
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
+  force  = true

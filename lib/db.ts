@@ -2,14 +2,20 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { Client as LineClient, Message } from '@line/bot-sdk'
 
-// Supabase の初期化
-const supabase: SupabaseClient = createClient(
+// ──────────────────────────────────────────────────────────────
+// Supabase クライアントをエクスポート
+//  - process.env.SUPABASE_URL および process.env.SUPABASE_SERVICE_ROLE_KEY が正しく設定されていること
+// ──────────────────────────────────────────────────────────────
+export const supabase: SupabaseClient = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// LINE Bot SDK の初期化
-const lineClient = new LineClient({
+// ──────────────────────────────────────────────────────────────
+// LINE Bot SDK クライアントをエクスポート
+//  - process.env.LINE_CHANNEL_ACCESS_TOKEN が正しく設定されていること
+// ──────────────────────────────────────────────────────────────
+export const lineClient = new LineClient({
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
 })
 
@@ -20,6 +26,9 @@ export async function saveAnswer(
   userId: string,
   data: { question: number; answer: number }
 ) {
+  // ★ここで保存直前のデータ内容をログ出力
+  console.log('[SAVE_ANSWER]', { userId, ...data })
+
   const { error } = await supabase
     .from('responses')
     .upsert(
@@ -55,9 +64,9 @@ export async function getAnswerCount(userId: string): Promise<number> {
 }
 
 /**
- * アンケート完了時にサンクスメッセージを送信
+ * Postback 後のアンケート完了通知：短いサンクスメッセージを送るラッパー
  */
-export async function finishSurveyAndReply(userId: string) {
+export async function notifySurveyCompleted(userId: string) {
   const messages: Message[] = [
     { type: 'text', text: '🎉 すべての回答を受け付けました！ありがとうございました！' },
   ]

@@ -5,60 +5,77 @@ import { createCanvas } from 'canvas'
 import Chart from 'chart.js/auto'
 import personaList from '../lib/persona.json'
 
+// traitMetaはDB/SQL関数の返すカラムに合わせて統一
 const traitMeta = [
   { key: 'extraversion', labelKey: 'trait.extraversion' },
   { key: 'agreeableness', labelKey: 'trait.agreeableness' },
   { key: 'conscientiousness', labelKey: 'trait.conscientiousness' },
-  { key: 'emotionality', labelKey: 'trait.emotionality' },
-  { key: 'creativity', labelKey: 'trait.creativity' }
+  { key: 'neuroticism', labelKey: 'trait.neuroticism' }, // emotionality→neuroticism
+  { key: 'openness', labelKey: 'trait.openness' }         // creativity→openness
 ]
 
 export const handler: Handler = async (event) => {
-  // ←ここを追加
-  console.log("[DEBUG] function called");
+  console.log("[DEBUG] finishSurveyAndReply called")
   try {
     const body = JSON.parse(event.body || '{}')
     const userId = body.userId as string
     const lang = body.lang as string
+    console.log('[DEBUG] userId:', userId, '| lang:', lang)
 
     // trait スコア取得
     const { data: scores, error: scoreError } = await supabase
-      .rpc('calc_scores', { user_id: userId })
+      .rpc('calc_scores', { p_user_id: userId })
+    console.log('[DEBUG] calc_scores:', scores, scoreError)
     if (scoreError || !scores) {
-      console.error('Error fetching scores:', scoreError)
-      return { statusCode: 500, body: 'Error fetching trait scores' }
+      console.error('Error fetching trait scores:', scoreError)
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'Error fetching trait scores', detail: scoreError })
+      }
     }
 
-    // personaから説明文生成
+    // persona説明文生成
     const descriptions = traitMeta.map(({ key }) => {
-      const score = (scores as any)[key] as number
+      const score = scores[0][key] as number
       const persona = personaList.find(
         (p: any) => p.trait === key && score >= p.min && score <= p.max
-      )!
-      return `[${key}] ${persona.name} (${score}点)\n${persona.description}`
+      )
+      if (persona) {
+        return `[${key}] ${persona.name} (${score}点)\n${persona.description}`
+      }
+      return `[${key}] スコア: ${score}点`
     }).join('\n\n')
+
+    // 送信テキスト長が長すぎる場合の対策（LINEは1000バイト以内厳守）
+    const textForLine = Buffer.byteLength(descriptions, 'utf-8') > 900
+      ? descriptions.slice(0, 880) + '…'
+      : descriptions
 
     await lineClient.pushMessage(userId, {
       type: 'text',
-      text: descriptions
+      text: textForLine
     })
 
-    // 全回答取得（idを含めて取得！ここ重要）
+    // 全回答取得（id必須！）カラム名修正
     const { data: allResponses, error: respError } = await supabase
       .from('responses')
-      .select('id, question_id, answer')
+      .select('id, item_id, score')
       .eq('user_id', userId)
       .order('answered_at', { ascending: false })
 
+    console.log('[DEBUG] allResponses:', allResponses, respError)
     if (respError || !allResponses || allResponses.length === 0) {
       console.error('Error fetching responses:', respError)
-      return { statusCode: 500, body: 'Error fetching user responses' }
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'Error fetching user responses', detail: respError })
+      }
     }
 
     // OpenAI要約
     const openaiPrompt = `
 以下はユーザのQ&Aペアです。200字以内で要約してください。
-${allResponses.map((r: any) => `Q${r.question_id}: ${r.answer}`).join('\n')}
+${allResponses.map((r: any) => `Q${r.item_id}: ${r.score}`).join('\n')}
 `
     const completion = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -79,35 +96,39 @@ ${allResponses.map((r: any) => `Q${r.question_id}: ${r.answer}`).join('\n')}
     if (!completion.ok) {
       const errBody = await completion.text()
       console.error('OpenAI API error:', errBody)
-      return { statusCode: 500, body: 'Error generating summary' }
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'Error generating summary', detail: errBody })
+      }
     }
     const completionJson = await completion.json()
     console.log('[DEBUG] OpenAI completionJson:', JSON.stringify(completionJson, null, 2))
     const summaryText = (completionJson.choices[0].message.content as string).slice(0, 200)
     console.log('[DEBUG] summaryText:', summaryText)
 
-    // ここからがid特定update（最新idのみ）
+    // id特定update（最新idのみ）
     const latestId = allResponses[0].id
     const { data: updateResult, error: updateError } = await supabase
       .from('responses')
       .update({ summary: summaryText })
       .eq('id', latestId)
-
     console.log('[DEBUG] updateResult:', updateResult)
     console.log('[ERROR] updateError:', updateError)
-    console.log('[OK] Summary updated for user:', userId, '| latestId:', latestId, '| summary:', summaryText)
-
     if (updateError) {
       console.error('[ERROR] Error saving summary:', updateError)
-      return { statusCode: 500, body: 'Error saving summary' }
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'Error saving summary', detail: updateError })
+      }
     }
+    console.log('[OK] Summary updated for user:', userId, '| latestId:', latestId, '| summary:', summaryText)
 
     // traitスコア再取得
     const { data: scores2 } = await supabase
-      .rpc('calc_scores', { user_id: userId })
+      .rpc('calc_scores', { p_user_id: userId })
     const labels = traitMeta.map(({ key }) => key)
     const dataValues = traitMeta.map(({ key }) =>
-      (scores2 as any)[key] as number
+      (scores2[0][key]) as number
     )
 
     // レーダーチャート生成

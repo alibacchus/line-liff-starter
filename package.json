@@ -2,17 +2,21 @@
   "name": "line-liff-starter",
   "version": "1.0.0",
   "scripts": {
-    "dev:fn": "netlify dev --functions=functions",
+    "dev:fn": "netlify dev --functions=functions --port=8888",
     "dev:web": "serve -s liff -l 19006",
-    "dev": "echo \"▶︎ run 'npm run dev:fn' と (任意で) 'npm run dev:web' を別タブで実行してください\"",
-    "build": "netlify build"
+    "build": "netlify build",
+    "build:liff": "vite build --outDir liff",
+    "dev": "echo \"▶︎ run 'npm run dev:fn' と (任意で) 'npm run dev:web' を別タブで実行してください\""
   },
   "dependencies": {
     "@line/bot-sdk": "^9.9.0",
+    "@netlify/functions": "^3.1.8",
     "@supabase/supabase-js": "^2.49.4",
-    "@netlify/functions": "^3.1.8"
+    "canvas": "^3.1.0",
+    "chart.js": "^4.4.9"
   },
   "devDependencies": {
-    "serve": "^14.2.0"
+    "serve": "^14.2.0",
+    "vite": "^5.0.0"
   }
 }
