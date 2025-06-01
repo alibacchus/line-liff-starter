@@ -14,6 +14,8 @@ const traitMeta = [
 ]
 
 export const handler: Handler = async (event) => {
+  // ←ここを追加
+  console.log("[DEBUG] function called");
   try {
     const body = JSON.parse(event.body || '{}')
     const userId = body.userId as string
